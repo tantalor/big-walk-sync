@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Compass, 
   Clock, 
-  Calendar, 
+  Calendar as CalendarIcon, 
   Users, 
   Plus, 
   Trash2, 
@@ -14,7 +14,8 @@ import {
   Volume2,
   Cloud,
   Check,
-  RefreshCw
+  RefreshCw,
+  ChevronLeft
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -98,13 +99,17 @@ export default function App() {
   const [schedules, setSchedules] = useState(EMPTY_SCHEDULES);
   const [isSyncing, setIsSyncing] = useState(true);
 
-  // New Slot Form State (No title/note field)
+  // New Slot Form State
   const [newDate, setNewDate] = useState(getTodayStr(0));
   const [newStartTime, setNewStartTime] = useState('20:00');
   const [newEndTime, setNewEndTime] = useState('23:00');
   const [formError, setFormError] = useState('');
 
-  // 1. Authenticated Session Effect (Enforcing Auth for Production Rules)
+  // Calendar Widget State
+  const [showCalendar, setShowCalendar] = useState(false);
+  const [calendarViewDate, setCalendarViewDate] = useState(new Date());
+
+  // 1. Authenticated Session Effect
   useEffect(() => {
     const initAuth = async () => {
       try {
@@ -112,7 +117,6 @@ export default function App() {
         if (customToken) {
           await signInWithCustomToken(auth, customToken);
         } else {
-          // Anonymous authentication creates a unique UID per user/device
           await signInAnonymously(auth);
         }
       } catch (err) {
@@ -173,7 +177,7 @@ export default function App() {
     }
   };
 
-  // Add new slot for current active user (persisted to cloud)
+  // Add new slot for current active user
   const handleAddSlot = async (e) => {
     e.preventDefault();
     setFormError('');
@@ -222,15 +226,13 @@ export default function App() {
     }
   };
 
-  // Remove slot (persisted to cloud)
+  // Remove slot
   const handleDeleteSlot = async (userId, slotId) => {
-    // Optimistic UI update
     setSchedules(prev => ({
       ...prev,
       [userId]: prev[userId].filter(slot => slot.id !== slotId)
     }));
 
-    // Remove from Firestore
     if (user) {
       try {
         const slotRef = doc(db, 'artifacts', appId, 'public', 'data', 'schedules', slotId);
@@ -258,6 +260,56 @@ export default function App() {
       return isoString;
     }
   };
+
+  // Calendar calculations & helper functions
+  const calendarDays = useMemo(() => {
+    const year = calendarViewDate.getFullYear();
+    const month = calendarViewDate.getMonth();
+    
+    const firstDayOfMonth = new Date(year, month, 1);
+    const lastDayOfMonth = new Date(year, month + 1, 0);
+    
+    const startingDayOfWeek = firstDayOfMonth.getDay(); // 0 = Sun
+    const totalDays = lastDayOfMonth.getDate();
+    
+    const days = [];
+    
+    // Previous month padding
+    const prevMonthLastDay = new Date(year, month, 0).getDate();
+    for (let i = startingDayOfWeek - 1; i >= 0; i--) {
+      const d = new Date(year, month - 1, prevMonthLastDay - i);
+      days.push({ date: d, isCurrentMonth: false, dateStr: d.toISOString().split('T')[0] });
+    }
+    
+    // Current month days
+    for (let i = 1; i <= totalDays; i++) {
+      const d = new Date(year, month, i);
+      days.push({ date: d, isCurrentMonth: true, dateStr: d.toISOString().split('T')[0] });
+    }
+    
+    // Next month padding
+    const remainingSlots = 42 - days.length; // 6 rows of 7
+    for (let i = 1; i <= remainingSlots; i++) {
+      const d = new Date(year, month + 1, i);
+      days.push({ date: d, isCurrentMonth: false, dateStr: d.toISOString().split('T')[0] });
+    }
+    
+    return days;
+  }, [calendarViewDate]);
+
+  const monthLabel = calendarViewDate.toLocaleString('default', { month: 'long', year: 'numeric' });
+
+  const selectDateStr = (dateStr) => {
+    setNewDate(dateStr);
+    setShowCalendar(false);
+  };
+
+  const formattedSelectedDate = useMemo(() => {
+    if (!newDate) return 'Select date';
+    const [y, m, d] = newDate.split('-').map(Number);
+    const dateObj = new Date(y, m - 1, d);
+    return dateObj.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+  }, [newDate]);
 
   // Calculate overlaps across all players
   const overlaps = useMemo(() => {
@@ -332,7 +384,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#1c221a] text-stone-100 font-sans pb-16 selection:bg-[#bef264] selection:text-stone-900">
       
-      {/* HEADER BAR WITH BIG WALK LIME ACCENTS */}
+      {/* HEADER BAR */}
       <header className="border-b border-[#364332] bg-[#222b20]/90 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -382,7 +434,7 @@ export default function App() {
 
       <main className="max-w-7xl mx-auto px-4 pt-6 space-y-8">
 
-        {/* TOP HERO BANNER / FULL TRIO OVERLAPS HIGHLIGHT */}
+        {/* OVERLAPS HERO BANNER */}
         <section className="relative overflow-hidden rounded-3xl bg-[#252f23] border-2 border-[#bef264]/40 p-6 shadow-2xl">
           <div className="absolute top-0 right-0 -mt-10 -mr-10 w-64 h-64 bg-[#bef264]/10 rounded-full blur-3xl pointer-events-none" />
           <div className="absolute bottom-0 left-0 -mb-10 -ml-10 w-64 h-64 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
@@ -435,7 +487,6 @@ export default function App() {
                     <span className="text-stone-200 font-semibold">{formatInUserTZ(overlap.endISO)}</span>
                   </div>
 
-                  {/* Avatars of attending members */}
                   <div className="flex items-center justify-between pt-3 border-t border-[#313f2f]">
                     <div className="flex items-center gap-1.5">
                       {overlap.users.map(uId => {
@@ -514,10 +565,10 @@ export default function App() {
           </div>
         </section>
 
-        {/* TWO COLUMN LAYOUT: INPUT FORM & SQUAD LISTING */}
+        {/* TWO COLUMN LAYOUT */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
 
-          {/* LEFT: ADD AVAILABILITY FORM */}
+          {/* LEFT: ADD AVAILABILITY FORM WITH INTERACTIVE CALENDAR */}
           <div className="lg:col-span-1 space-y-6">
             <div className="bg-[#222b20] p-6 rounded-3xl border border-[#364332] shadow-xl space-y-5">
               <div className="flex items-center gap-2 border-b border-[#313f2f] pb-3">
@@ -534,14 +585,112 @@ export default function App() {
               )}
 
               <form onSubmit={handleAddSlot} className="space-y-4">
-                <div>
+                
+                {/* CALENDAR DATE SELECTOR FIELD */}
+                <div className="relative">
                   <label className="text-xs font-bold text-stone-300 block mb-1.5 uppercase font-mono tracking-wider">Date</label>
-                  <input
-                    type="date"
-                    value={newDate}
-                    onChange={(e) => setNewDate(e.target.value)}
-                    className="w-full bg-[#161d15] border border-[#364433] rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-[#bef264] transition-colors font-medium"
-                  />
+                  
+                  <button
+                    type="button"
+                    onClick={() => setShowCalendar(!showCalendar)}
+                    className="w-full bg-[#161d15] border border-[#364433] hover:border-[#bef264] rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none transition-colors font-semibold flex items-center justify-between"
+                  >
+                    <span className="flex items-center gap-2">
+                      <CalendarIcon className="w-4 h-4 text-[#bef264]" />
+                      {formattedSelectedDate}
+                    </span>
+                    <span className="text-[10px] bg-[#222b20] text-stone-400 px-2 py-0.5 rounded-md border border-[#364433]">
+                      Change
+                    </span>
+                  </button>
+
+                  {/* POPUP CALENDAR WIDGET */}
+                  {showCalendar && (
+                    <div className="absolute top-full left-0 right-0 mt-2 bg-[#171e16] border-2 border-[#bef264]/60 rounded-2xl p-4 z-50 shadow-2xl space-y-3">
+                      
+                      {/* Quick Selection Shortcuts */}
+                      <div className="flex items-center justify-between gap-1 pb-2 border-b border-[#2d3a2b]">
+                        <button
+                          type="button"
+                          onClick={() => selectDateStr(getTodayStr(0))}
+                          className="px-2.5 py-1 bg-[#242e22] hover:bg-[#bef264] hover:text-stone-950 text-[10px] font-bold text-stone-300 rounded-lg transition-colors"
+                        >
+                          Today
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => selectDateStr(getTodayStr(1))}
+                          className="px-2.5 py-1 bg-[#242e22] hover:bg-[#bef264] hover:text-stone-950 text-[10px] font-bold text-stone-300 rounded-lg transition-colors"
+                        >
+                          Tomorrow
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const d = new Date();
+                            const day = d.getDay();
+                            const diffToSat = (6 - day + 7) % 7 || 7;
+                            selectDateStr(getTodayStr(diffToSat));
+                          }}
+                          className="px-2.5 py-1 bg-[#242e22] hover:bg-[#bef264] hover:text-stone-950 text-[10px] font-bold text-stone-300 rounded-lg transition-colors"
+                        >
+                          Saturday
+                        </button>
+                      </div>
+
+                      {/* Month Navigation */}
+                      <div className="flex items-center justify-between">
+                        <button
+                          type="button"
+                          onClick={() => setCalendarViewDate(new Date(calendarViewDate.setMonth(calendarViewDate.getMonth() - 1)))}
+                          className="p-1 hover:bg-[#242e22] rounded-lg text-stone-400 hover:text-white"
+                        >
+                          <ChevronLeft className="w-4 h-4" />
+                        </button>
+                        <span className="text-xs font-bold text-white font-mono">{monthLabel}</span>
+                        <button
+                          type="button"
+                          onClick={() => setCalendarViewDate(new Date(calendarViewDate.setMonth(calendarViewDate.getMonth() + 1)))}
+                          className="p-1 hover:bg-[#242e22] rounded-lg text-stone-400 hover:text-white"
+                        >
+                          <ChevronRight className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      {/* Days of Week Header */}
+                      <div className="grid grid-cols-7 text-center text-[10px] font-bold text-stone-500 font-mono">
+                        <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
+                      </div>
+
+                      {/* Calendar Grid */}
+                      <div className="grid grid-cols-7 gap-1">
+                        {calendarDays.map((dayObj, i) => {
+                          const isSelected = dayObj.dateStr === newDate;
+                          const isToday = dayObj.dateStr === getTodayStr(0);
+
+                          return (
+                            <button
+                              key={i}
+                              type="button"
+                              onClick={() => selectDateStr(dayObj.dateStr)}
+                              className={`h-7 text-xs font-semibold rounded-lg flex items-center justify-center transition-all ${
+                                isSelected
+                                  ? 'bg-[#bef264] text-stone-950 font-black shadow-md scale-105'
+                                  : isToday
+                                  ? 'bg-[#2b3929] text-[#bef264] font-bold border border-[#bef264]/40'
+                                  : dayObj.isCurrentMonth
+                                  ? 'text-stone-200 hover:bg-[#242e22]'
+                                  : 'text-stone-600 hover:bg-[#1a2118]'
+                              }`}
+                            >
+                              {dayObj.date.getDate()}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
@@ -578,7 +727,7 @@ export default function App() {
           {/* RIGHT: ALL GAMERS SCHEDULE CARDS */}
           <div className="lg:col-span-2 space-y-6">
             <h3 className="text-sm font-extrabold text-white uppercase tracking-wider flex items-center gap-2 font-mono">
-              <Calendar className="w-4 h-4 text-[#bef264]" /> Trio Schedules ({userTimezone})
+              <CalendarIcon className="w-4 h-4 text-[#bef264]" /> Trio Schedules ({userTimezone})
             </h3>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
