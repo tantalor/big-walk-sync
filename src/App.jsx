@@ -33,19 +33,22 @@ import {
   deleteDoc 
 } from 'firebase/firestore';
 
-// Initialize Firebase using environment config or fallback
-const firebaseConfig = typeof __firebase_config !== 'undefined' 
-  ? JSON.parse(__firebase_config) 
-  : {
-      apiKey: "demo-api-key",
-      authDomain: "demo-app.firebaseapp.com",
-      projectId: "demo-app",
-      storageBucket: "demo-app.appspot.com",
-      messagingSenderId: "123456789",
-      appId: "1:123456789:web:123456789"
-    };
+// Safe check for config variables to prevent Netlify build failures
+const getFirebaseConfig = () => {
+  if (typeof __firebase_config !== 'undefined') {
+    return JSON.parse(__firebase_config);
+  }
+  return {
+    apiKey: "demo-api-key",
+    authDomain: "demo-app.firebaseapp.com",
+    projectId: "demo-app",
+    storageBucket: "demo-app.appspot.com",
+    messagingSenderId: "123456789",
+    appId: "1:123456789:web:123456789"
+  };
+};
 
-const app = initializeApp(firebaseConfig);
+const app = initializeApp(getFirebaseConfig());
 const auth = getAuth(app);
 const db = getFirestore(app);
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'big-walk-sync-app';
