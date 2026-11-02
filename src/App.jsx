@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Compass, 
   Clock, 
@@ -12,8 +12,43 @@ import {
   Footprints,
   Eye,
   Radio,
-  Volume2
+  Volume2,
+  Cloud,
+  Check,
+  RefreshCw
 } from 'lucide-react';
+import { initializeApp } from 'firebase/app';
+import { 
+  getAuth, 
+  signInAnonymously, 
+  signInWithCustomToken, 
+  onAuthStateChanged 
+} from 'firebase/auth';
+import { 
+  getFirestore, 
+  collection, 
+  doc, 
+  onSnapshot, 
+  setDoc, 
+  deleteDoc 
+} from 'firebase/firestore';
+
+// Initialize Firebase using environment config or fallback
+const firebaseConfig = typeof __firebase_config !== 'undefined' 
+  ? JSON.parse(__firebase_config) 
+  : {
+      apiKey: "demo-api-key",
+      authDomain: "demo-app.firebaseapp.com",
+      projectId: "demo-app",
+      storageBucket: "demo-app.appspot.com",
+      messagingSenderId: "123456789",
+      appId: "1:123456789:web:123456789"
+    };
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'big-walk-sync-app';
 
 // Preset Squad Members for BIG WALK inspired by character colors in screenshots
 const SQUAD_MEMBERS = [
@@ -68,15 +103,74 @@ const INITIAL_SCHEDULES = {
 };
 
 export default function App() {
+  const [user, setUser] = useState(null);
   const [currentUser, setCurrentUser] = useState('walker_1');
   const [userTimezone, setUserTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/New_York');
   const [schedules, setSchedules] = useState(INITIAL_SCHEDULES);
+  const [isSyncing, setIsSyncing] = useState(true);
 
   // New Slot Form State (No title/note field)
   const [newDate, setNewDate] = useState(getTodayStr(0));
   const [newStartTime, setNewStartTime] = useState('20:00');
   const [newEndTime, setNewEndTime] = useState('23:00');
   const [formError, setFormError] = useState('');
+
+  // 1. Authentication Effect
+  useEffect(() => {
+    const initAuth = async () => {
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+      } catch (err) {
+        console.error("Auth initialization error:", err);
+      }
+    };
+
+    initAuth();
+    const unsubscribe = onAuthStateChanged(auth, (usr) => {
+      setUser(usr);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // 2. Real-time Firestore Sync Effect
+  useEffect(() => {
+    if (!user) return;
+
+    setIsSyncing(true);
+    const slotsCollection = collection(db, 'artifacts', appId, 'public', 'data', 'schedules');
+
+    const unsubscribe = onSnapshot(slotsCollection, (snapshot) => {
+      const updatedSchedules = {
+        walker_1: [],
+        walker_2: [],
+        walker_3: []
+      };
+
+      if (!snapshot.empty) {
+        snapshot.docs.forEach((docSnap) => {
+          const data = docSnap.data();
+          if (data && data.userId && updatedSchedules[data.userId]) {
+            updatedSchedules[data.userId].push({
+              id: docSnap.id,
+              ...data
+            });
+          }
+        });
+        setSchedules(updatedSchedules);
+      }
+      setIsSyncing(false);
+    }, (error) => {
+      console.error("Firestore snapshot error:", error);
+      setIsSyncing(false);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
 
   // Convert inputs to UTC ISO string
   const createISOFromLocal = (dateStr, timeStr) => {
@@ -89,8 +183,8 @@ export default function App() {
     }
   };
 
-  // Add new slot for current active user
-  const handleAddSlot = (e) => {
+  // Add new slot for current active user (persisted to cloud)
+  const handleAddSlot = async (e) => {
     e.preventDefault();
     setFormError('');
 
@@ -109,38 +203,52 @@ export default function App() {
       endISO = createISOFromLocal(nextDayStr, newEndTime);
     }
 
+    const slotId = `${currentUser}-${Date.now()}`;
     const newSlot = {
-      id: `${currentUser}-${Date.now()}`,
+      userId: currentUser,
       startDate: newDate,
       startTime: newStartTime,
       endDate: newDate,
       endTime: newEndTime,
       startISO,
-      endISO
+      endISO,
+      createdAt: new Date().toISOString()
     };
 
+    // Local optimistic update
     setSchedules(prev => ({
       ...prev,
-      [currentUser]: [...(prev[currentUser] || []), newSlot]
+      [currentUser]: [...(prev[currentUser] || []), { id: slotId, ...newSlot }]
     }));
+
+    // Cloud persistence update
+    if (user) {
+      try {
+        const slotRef = doc(db, 'artifacts', appId, 'public', 'data', 'schedules', slotId);
+        await setDoc(slotRef, newSlot);
+      } catch (err) {
+        console.error("Failed to save slot to cloud:", err);
+      }
+    }
   };
 
-  const handleApplyPreset = (preset) => {
-    const todayStr = getTodayStr(0);
-    const startHrStr = String(preset.startHr % 24).padStart(2, '0') + ':00';
-    const endHrStr = String(preset.endHr % 24).padStart(2, '0') + ':00';
-    
-    setNewDate(todayStr);
-    setNewStartTime(startHrStr);
-    setNewEndTime(endHrStr);
-  };
-
-  // Remove slot
-  const handleDeleteSlot = (userId, slotId) => {
+  // Remove slot (persisted to cloud)
+  const handleDeleteSlot = async (userId, slotId) => {
+    // Local optimistic update
     setSchedules(prev => ({
       ...prev,
       [userId]: prev[userId].filter(slot => slot.id !== slotId)
     }));
+
+    // Cloud persistence update
+    if (user) {
+      try {
+        const slotRef = doc(db, 'artifacts', appId, 'public', 'data', 'schedules', slotId);
+        await deleteDoc(slotRef);
+      } catch (err) {
+        console.error("Failed to delete slot from cloud:", err);
+      }
+    }
   };
 
   // Format ISO timestamp in user's selected timezone
@@ -248,8 +356,17 @@ export default function App() {
                   3 Walkers
                 </span>
               </h1>
-              <p className="text-xs text-stone-400 flex items-center gap-1">
-                <Radio className="w-3.5 h-3.5 text-lime-400" /> Walkie-Talkie Squad Availability & Timezone Alignment
+              <p className="text-xs text-stone-400 flex items-center gap-2">
+                <Radio className="w-3.5 h-3.5 text-lime-400" /> Walkie-Talkie Squad Availability
+                {isSyncing ? (
+                  <span className="flex items-center gap-1 text-[#bef264] text-[11px] font-bold">
+                    <RefreshCw className="w-3 h-3 animate-spin" /> Syncing...
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1 text-emerald-400 text-[11px] font-bold">
+                    <Cloud className="w-3.5 h-3.5" /> <Check className="w-3 h-3 -ml-1" /> Saved to Cloud
+                  </span>
+                )}
               </p>
             </div>
           </div>
