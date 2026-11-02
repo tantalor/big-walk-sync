@@ -15,7 +15,9 @@ import {
   Cloud,
   Check,
   RefreshCw,
-  ChevronLeft
+  ChevronLeft,
+  Pencil,
+  X
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -99,7 +101,8 @@ export default function App() {
   const [schedules, setSchedules] = useState(EMPTY_SCHEDULES);
   const [isSyncing, setIsSyncing] = useState(true);
 
-  // New Slot Form State
+  // New & Editing Slot Form State
+  const [editingSlotId, setEditingSlotId] = useState(null);
   const [newDate, setNewDate] = useState(getTodayStr(0));
   const [newStartTime, setNewStartTime] = useState('20:00');
   const [newEndTime, setNewEndTime] = useState('23:00');
@@ -108,6 +111,15 @@ export default function App() {
   // Calendar Widget State
   const [showCalendar, setShowCalendar] = useState(false);
   const [calendarViewDate, setCalendarViewDate] = useState(new Date());
+
+  // Reset Form to default add state
+  const resetForm = () => {
+    setEditingSlotId(null);
+    setNewDate(getTodayStr(0));
+    setNewStartTime('20:00');
+    setNewEndTime('23:00');
+    setFormError('');
+  };
 
   // 1. Authenticated Session Effect
   useEffect(() => {
@@ -177,8 +189,40 @@ export default function App() {
     }
   };
 
-  // Add new slot for current active user
-  const handleAddSlot = async (e) => {
+  // Populate form for editing an existing slot
+  const handleStartEdit = (slot) => {
+    setEditingSlotId(slot.id);
+    
+    // Convert ISO string back to local YYYY-MM-DD and HH:MM format
+    if (slot.startISO) {
+      const startDateObj = new Date(slot.startISO);
+      const endDateObj = new Date(slot.endISO);
+
+      // Local date string YYYY-MM-DD
+      const localY = startDateObj.getFullYear();
+      const localM = String(startDateObj.getMonth() + 1).padStart(2, '0');
+      const localD = String(startDateObj.getDate()).padStart(2, '0');
+      setNewDate(`${localY}-${localM}-${localD}`);
+
+      // Local time strings HH:MM
+      const startH = String(startDateObj.getHours()).padStart(2, '0');
+      const startMin = String(startDateObj.getMinutes()).padStart(2, '0');
+      setNewStartTime(`${startH}:${startMin}`);
+
+      const endH = String(endDateObj.getHours()).padStart(2, '0');
+      const endMin = String(endDateObj.getMinutes()).padStart(2, '0');
+      setNewEndTime(`${endH}:${endMin}`);
+    } else {
+      setNewDate(slot.startDate || getTodayStr(0));
+      setNewStartTime(slot.startTime || '20:00');
+      setNewEndTime(slot.endTime || '23:00');
+    }
+
+    setFormError('');
+  };
+
+  // Add or Update slot for current active user
+  const handleSaveSlot = async (e) => {
     e.preventDefault();
     setFormError('');
 
@@ -197,8 +241,8 @@ export default function App() {
       endISO = createISOFromLocal(nextDayStr, newEndTime);
     }
 
-    const slotId = `${currentUser}-${Date.now()}`;
-    const newSlot = {
+    const targetSlotId = editingSlotId || `${currentUser}-${Date.now()}`;
+    const slotPayload = {
       userId: currentUser,
       startDate: newDate,
       startTime: newStartTime,
@@ -210,24 +254,40 @@ export default function App() {
     };
 
     // Optimistic UI update
-    setSchedules(prev => ({
-      ...prev,
-      [currentUser]: [...(prev[currentUser] || []), { id: slotId, ...newSlot }]
-    }));
+    setSchedules(prev => {
+      const currentList = prev[currentUser] || [];
+      if (editingSlotId) {
+        return {
+          ...prev,
+          [currentUser]: currentList.map(s => s.id === editingSlotId ? { id: editingSlotId, ...slotPayload } : s)
+        };
+      }
+      return {
+        ...prev,
+        [currentUser]: [...currentList, { id: targetSlotId, ...slotPayload }]
+      };
+    });
 
-    // Save to Firestore
+    // Save/Update to Firestore
     if (user) {
       try {
-        const slotRef = doc(db, 'artifacts', appId, 'public', 'data', 'schedules', slotId);
-        await setDoc(slotRef, newSlot);
+        const slotRef = doc(db, 'artifacts', appId, 'public', 'data', 'schedules', targetSlotId);
+        await setDoc(slotRef, slotPayload);
       } catch (err) {
         console.error("Failed to save slot to cloud:", err);
       }
     }
+
+    // Reset editor form state
+    resetForm();
   };
 
   // Remove slot
   const handleDeleteSlot = async (userId, slotId) => {
+    if (editingSlotId === slotId) {
+      resetForm();
+    }
+
     setSchedules(prev => ({
       ...prev,
       [userId]: prev[userId].filter(slot => slot.id !== slotId)
@@ -385,7 +445,7 @@ export default function App() {
     <div className="min-h-screen bg-[#1c221a] text-stone-100 font-sans pb-16 selection:bg-[#bef264] selection:text-stone-900">
       
       {/* HEADER BAR */}
-      <header className="border-b border-[#364332] bg-[#222b20]/90 backdrop-blur-md sticky top-0 z-50">
+      {
         <div className="max-w-7xl mx-auto px-4 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="p-3 bg-[#bef264] rounded-2xl shadow-lg shadow-[#bef264]/10 border border-[#d9f99d]">
@@ -475,10 +535,10 @@ export default function App() {
                     </div>
                   )}
 
-                  <div className="flex items-start justify-between mt-1 mb-2">
-                    <div className="flex items-center gap-1.5 text-xs font-bold text-[#bef264]">
-                      <Clock className="w-4 h-4" />
-                      <span>{formatInUserTZ(overlap.startISO)}</span>
+      <main className="max-w-7xl mx-auto px-4 pt-6 space-y-8">
+
+        {/* OVERLAPS HERO BANNER */}
+        {
                     </div>
                   </div>
 
@@ -584,7 +644,98 @@ export default function App() {
                 </div>
               )}
 
-              <form onSubmit={handleAddSlot} className="space-y-4">
+        {/* ACTIVE USER VIEW SWITCHER BAR */}
+        <section className="bg-[#222b20] p-5 rounded-3xl border border-[#364332] shadow-lg">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
+            <div>
+              <h3 className="text-sm font-extrabold text-white flex items-center gap-2 tracking-wide font-mono uppercase">
+                <Users className="w-4 h-4 text-lime-400" />
+                SELECT YOUR WALKER
+              </h3>
+              <p className="text-xs text-stone-400">Switch views to edit free hours for each of the 3 players.</p>
+            </div>
+            <div className="flex items-center gap-1.5 bg-[#161d15] px-3 py-1.5 rounded-xl border border-[#364332]">
+              <Eye className="w-3.5 h-3.5 text-amber-400" />
+              <span className="text-[11px] text-stone-400">Editing as: <strong className="text-white font-bold">{activeUserObj?.name}</strong></span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {SQUAD_MEMBERS.map(member => {
+              const isActive = member.id === currentUser;
+              const slotCount = (schedules[member.id] || []).length;
+
+              return (
+                <button
+                  key={member.id}
+                  onClick={() => {
+                    setCurrentUser(member.id);
+                    resetForm();
+                  }}
+                  className={`relative p-4 rounded-2xl border text-left transition-all duration-200 flex items-center gap-3.5 ${
+                    isActive 
+                      ? `bg-[#182117] border-[#bef264] shadow-md ring-2 ring-[#bef264]/40` 
+                      : 'bg-[#171e16] border-[#2e3b2b] hover:border-stone-600 hover:bg-[#1f281d]'
+                  }`}
+                >
+                  <div className={`w-11 h-11 rounded-2xl flex items-center justify-center text-xl bg-[#242e22] border-2 ${member.border} shadow-inner`}>
+                    {member.avatar}
+                  </div>
+                  <div className="overflow-hidden">
+                    <p className={`text-xs font-extrabold truncate ${isActive ? 'text-white' : 'text-stone-300'}`}>
+                      {member.name}
+                    </p>
+                    <p className="text-[11px] text-stone-400 mt-0.5">
+                      {slotCount} {slotCount === 1 ? 'time slot' : 'time slots'} set
+                    </p>
+                  </div>
+                  {isActive && (
+                    <div className="absolute top-3 right-3 w-2.5 h-2.5 rounded-full bg-[#bef264] animate-ping" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* TWO COLUMN LAYOUT */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+
+          {/* LEFT: ADD / EDIT AVAILABILITY FORM WITH INTERACTIVE CALENDAR */}
+          <div className="lg:col-span-1 space-y-6">
+            <div className={`bg-[#222b20] p-6 rounded-3xl border shadow-xl space-y-5 transition-all ${
+              editingSlotId ? 'border-amber-400/80 ring-2 ring-amber-400/30' : 'border-[#364332]'
+            }`}>
+              <div className="flex items-center justify-between border-b border-[#313f2f] pb-3">
+                <div className="flex items-center gap-2">
+                  {editingSlotId ? (
+                    <Pencil className="w-5 h-5 text-amber-400" />
+                  ) : (
+                    <Plus className="w-5 h-5 text-[#bef264]" />
+                  )}
+                  <h3 className="text-sm font-extrabold text-white uppercase tracking-wider font-mono">
+                    {editingSlotId ? 'Edit Time for' : 'Add Time for'} <span className={activeUserObj?.tagColor}>{activeUserObj?.name}</span>
+                  </h3>
+                </div>
+
+                {editingSlotId && (
+                  <button
+                    type="button"
+                    onClick={resetForm}
+                    className="text-stone-400 hover:text-stone-200 text-xs flex items-center gap-1 bg-[#161d15] px-2.5 py-1 rounded-lg border border-[#364332]"
+                  >
+                    <X className="w-3.5 h-3.5" /> Cancel
+                  </button>
+                )}
+              </div>
+
+              {formError && (
+                <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-xs text-rose-400 font-medium">
+                  {formError}
+                </div>
+              )}
+
+              <form onSubmit={handleSaveSlot} className="space-y-4">
                 
                 {/* CALENDAR DATE SELECTOR FIELD */}
                 <div className="relative">
@@ -716,15 +867,27 @@ export default function App() {
 
                 <button
                   type="submit"
-                  className="w-full py-3 bg-[#bef264] hover:bg-[#d9f99d] text-stone-950 font-black text-xs rounded-2xl shadow-lg shadow-[#bef264]/20 transition-all duration-200 flex items-center justify-center gap-2 uppercase tracking-wider font-mono mt-2 cursor-pointer"
+                  className={`w-full py-3 font-black text-xs rounded-2xl shadow-lg transition-all duration-200 flex items-center justify-center gap-2 uppercase tracking-wider font-mono mt-2 cursor-pointer ${
+                    editingSlotId
+                      ? 'bg-amber-400 hover:bg-amber-300 text-stone-950 shadow-amber-400/20'
+                      : 'bg-[#bef264] hover:bg-[#d9f99d] text-stone-950 shadow-[#bef264]/20'
+                  }`}
                 >
-                  <Plus className="w-4 h-4 stroke-[3]" /> Add Available Hours
+                  {editingSlotId ? (
+                    <>
+                      <Check className="w-4 h-4 stroke-[3]" /> Save Changes
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="w-4 h-4 stroke-[3]" /> Add Available Hours
+                    </>
+                  )}
                 </button>
               </form>
             </div>
           </div>
 
-          {/* RIGHT: ALL GAMERS SCHEDULE CARDS */}
+          {/* RIGHT: ALL GAMERS SCHEDULE CARDS (SORTED BY DATE/TIME) */}
           <div className="lg:col-span-2 space-y-6">
             <h3 className="text-sm font-extrabold text-white uppercase tracking-wider flex items-center gap-2 font-mono">
               <CalendarIcon className="w-4 h-4 text-[#bef264]" /> Trio Schedules ({userTimezone})
@@ -733,7 +896,13 @@ export default function App() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {SQUAD_MEMBERS.map(member => {
                 const isCurrentActive = member.id === currentUser;
-                const userSlots = schedules[member.id] || [];
+                
+                // Chronologically sort schedule slots
+                const userSlots = [...(schedules[member.id] || [])].sort((a, b) => {
+                  const timeA = new Date(a.startISO).getTime();
+                  const timeB = new Date(b.startISO).getTime();
+                  return timeA - timeB;
+                });
 
                 return (
                   <div 
@@ -766,31 +935,52 @@ export default function App() {
                       </div>
                     ) : (
                       <div className="space-y-2.5">
-                        {userSlots.map(slot => (
-                          <div 
-                            key={slot.id}
-                            className="bg-[#161d15] p-3 rounded-2xl border border-[#313f2f] flex items-center justify-between group hover:border-stone-600 transition-colors"
-                          >
-                            <div className="space-y-1">
-                              <div className="text-[11px] text-[#bef264] font-mono font-bold flex items-center gap-1">
-                                <Clock className="w-3.5 h-3.5 text-lime-400" />
-                                <span>{formatInUserTZ(slot.startISO)}</span>
-                                <ChevronRight className="w-3 h-3 text-stone-500" />
-                                <span>{formatInUserTZ(slot.endISO)}</span>
-                              </div>
-                            </div>
+                        {userSlots.map(slot => {
+                          const isBeingEdited = editingSlotId === slot.id;
 
-                            {isCurrentActive && (
-                              <button
-                                onClick={() => handleDeleteSlot(member.id, slot.id)}
-                                title="Delete Time Window"
-                                className="text-stone-500 hover:text-rose-400 p-1.5 rounded-xl hover:bg-[#222b20] transition-colors"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-                          </div>
-                        ))}
+                          return (
+                            <div 
+                              key={slot.id}
+                              className={`bg-[#161d15] p-3 rounded-2xl border flex items-center justify-between group transition-colors ${
+                                isBeingEdited 
+                                  ? 'border-amber-400 ring-1 ring-amber-400/50 bg-[#1e241c]' 
+                                  : 'border-[#313f2f] hover:border-stone-600'
+                              }`}
+                            >
+                              <div className="space-y-1">
+                                <div className="text-[11px] text-[#bef264] font-mono font-bold flex items-center gap-1">
+                                  <Clock className="w-3.5 h-3.5 text-lime-400" />
+                                  <span>{formatInUserTZ(slot.startISO)}</span>
+                                  <ChevronRight className="w-3 h-3 text-stone-500" />
+                                  <span>{formatInUserTZ(slot.endISO)}</span>
+                                </div>
+                              </div>
+
+                              {isCurrentActive && (
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    onClick={() => handleStartEdit(slot)}
+                                    title="Edit Time Window"
+                                    className={`p-1.5 rounded-xl transition-colors ${
+                                      isBeingEdited 
+                                        ? 'text-amber-400 bg-amber-400/10' 
+                                        : 'text-stone-500 hover:text-amber-400 hover:bg-[#222b20]'
+                                    }`}
+                                  >
+                                    <Pencil className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteSlot(member.id, slot.id)}
+                                    title="Delete Time Window"
+                                    className="text-stone-500 hover:text-rose-400 p-1.5 rounded-xl hover:bg-[#222b20] transition-colors"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
