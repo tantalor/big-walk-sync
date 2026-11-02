@@ -35,8 +35,14 @@ import {
 
 // Safe check for config variables to prevent Netlify build failures
 const getFirebaseConfig = () => {
-  if (typeof __firebase_config !== 'undefined') {
-    return JSON.parse(__firebase_config);
+  try {
+    if (typeof window !== 'undefined' && window.__firebase_config) {
+      return typeof window.__firebase_config === 'string' 
+        ? JSON.parse(window.__firebase_config) 
+        : window.__firebase_config;
+    }
+  } catch (e) {
+    console.warn("Using fallback firebase config");
   }
   return {
     apiKey: "demo-api-key",
@@ -51,7 +57,7 @@ const getFirebaseConfig = () => {
 const app = initializeApp(getFirebaseConfig());
 const auth = getAuth(app);
 const db = getFirestore(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'big-walk-sync-app';
+const appId = (typeof window !== 'undefined' && window.__app_id) ? window.__app_id : 'big-walk-sync-app';
 
 // Preset Squad Members for BIG WALK inspired by character colors in screenshots
 const SQUAD_MEMBERS = [
@@ -122,8 +128,9 @@ export default function App() {
   useEffect(() => {
     const initAuth = async () => {
       try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
+        const customToken = typeof window !== 'undefined' ? window.__initial_auth_token : undefined;
+        if (customToken) {
+          await signInWithCustomToken(auth, customToken);
         } else {
           await signInAnonymously(auth);
         }
