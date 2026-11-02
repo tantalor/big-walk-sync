@@ -1,41 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-// Safe check for config variables to support Vite env vars and preview fallbacks
-const getFirebaseConfig = () => {
-  try {
-    // Check Vite Environment Variables (Netlify/Production)
-    if (import.meta.env && import.meta.env.VITE_FIREBASE_API_KEY) {
-      return {
-        apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-        authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-        projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-        storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-        messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-        appId: import.meta.env.VITE_FIREBASE_APP_ID
-// Safe check for config variables to support both Vite Env and Direct Firebase Config
-const getFirebaseConfig = () => {
-  try {
-    if (typeof window !== 'undefined' && window.__firebase_config) {
-      return typeof window.__firebase_config === 'string' 
-        ? JSON.parse(window.__firebase_config) 
-        : window.__firebase_config;
-    }
-  } catch (e) {
-    console.warn("Using fallback firebase config");
-  }
-
-  // Check Vite environment variables first, then fallback to user's Firebase Console config
-  return {
-    apiKey: import.meta.env?.VITE_FIREBASE_API_KEY || "AIzaSyC1mn-jebT1u8YfkapjJlLRTY5VD352LJs",
-    authDomain: import.meta.env?.VITE_FIREBASE_AUTH_DOMAIN || "big-walk-sync.firebaseapp.com",
-    projectId: import.meta.env?.VITE_FIREBASE_PROJECT_ID || "big-walk-sync",
-    storageBucket: import.meta.env?.VITE_FIREBASE_STORAGE_BUCKET || "big-walk-sync.firebasestorage.app",
-    messagingSenderId: import.meta.env?.VITE_FIREBASE_MESSAGING_SENDER_ID || "693397147396",
-    appId: import.meta.env?.VITE_FIREBASE_APP_ID || "1:693397147396:web:a8a5c9b2bd7c6cf744ca51"
-  };
-};
-
-const app = initializeApp(getFirebaseConfig());
-
+import { 
   Compass, 
   Clock, 
   Calendar, 
@@ -69,20 +33,26 @@ import {
   deleteDoc 
 } from 'firebase/firestore';
 
-// Reads custom Firebase Config from environment variables or window scope
+// Reads custom Firebase Config from environment variables or fallback values
 const getFirebaseConfig = () => {
-  if (typeof window !== 'undefined' && window.__firebase_config) {
-    return typeof window.__firebase_config === 'string' 
-      ? JSON.parse(window.__firebase_config) 
-      : window.__firebase_config;
+  try {
+    if (typeof window !== 'undefined' && window.__firebase_config) {
+      return typeof window.__firebase_config === 'string' 
+        ? JSON.parse(window.__firebase_config) 
+        : window.__firebase_config;
+    }
+  } catch (e) {
+    console.warn("Using fallback firebase config");
   }
+
+  // Reads Netlify Environment Variables first, with direct fallback keys
   return {
-    apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "YOUR_API_KEY",
-    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "YOUR_PROJECT_ID.firebaseapp.com",
-    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "YOUR_PROJECT_ID",
-    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "YOUR_PROJECT_ID.appspot.com",
-    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "YOUR_SENDER_ID",
-    appId: import.meta.env.VITE_FIREBASE_APP_ID || "YOUR_APP_ID"
+    apiKey: import.meta.env?.VITE_FIREBASE_API_KEY || "AIzaSyC1mn-jebT1u8YfkapjJlLRTY5VD352LJs",
+    authDomain: import.meta.env?.VITE_FIREBASE_AUTH_DOMAIN || "big-walk-sync.firebaseapp.com",
+    projectId: import.meta.env?.VITE_FIREBASE_PROJECT_ID || "big-walk-sync",
+    storageBucket: import.meta.env?.VITE_FIREBASE_STORAGE_BUCKET || "big-walk-sync.firebasestorage.app",
+    messagingSenderId: import.meta.env?.VITE_FIREBASE_MESSAGING_SENDER_ID || "693397147396",
+    appId: import.meta.env?.VITE_FIREBASE_APP_ID || "1:693397147396:web:a8a5c9b2bd7c6cf744ca51"
   };
 };
 
