@@ -445,7 +445,7 @@ export default function App() {
     <div className="min-h-screen bg-[#1c221a] text-stone-100 font-sans pb-16 selection:bg-[#bef264] selection:text-stone-900">
       
       {/* HEADER BAR */}
-      {
+      <header className="border-b border-[#364332] bg-[#222b20]/90 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="p-3 bg-[#bef264] rounded-2xl shadow-lg shadow-[#bef264]/10 border border-[#d9f99d]">
@@ -535,10 +535,10 @@ export default function App() {
                     </div>
                   )}
 
-      <main className="max-w-7xl mx-auto px-4 pt-6 space-y-8">
-
-        {/* OVERLAPS HERO BANNER */}
-        {
+                  <div className="flex items-start justify-between mt-1 mb-2">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-[#bef264]">
+                      <Clock className="w-4 h-4" />
+                      <span>{formatInUserTZ(overlap.startISO)}</span>
                     </div>
                   </div>
 
@@ -573,76 +573,6 @@ export default function App() {
             </div>
           )}
         </section>
-
-        {/* ACTIVE USER VIEW SWITCHER BAR */}
-        <section className="bg-[#222b20] p-5 rounded-3xl border border-[#364332] shadow-lg">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
-            <div>
-              <h3 className="text-sm font-extrabold text-white flex items-center gap-2 tracking-wide font-mono uppercase">
-                <Users className="w-4 h-4 text-lime-400" />
-                SELECT YOUR WALKER
-              </h3>
-              <p className="text-xs text-stone-400">Switch views to edit free hours for each of the 3 players.</p>
-            </div>
-            <div className="flex items-center gap-1.5 bg-[#161d15] px-3 py-1.5 rounded-xl border border-[#364332]">
-              <Eye className="w-3.5 h-3.5 text-amber-400" />
-              <span className="text-[11px] text-stone-400">Editing as: <strong className="text-white font-bold">{activeUserObj?.name}</strong></span>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {SQUAD_MEMBERS.map(member => {
-              const isActive = member.id === currentUser;
-              const slotCount = (schedules[member.id] || []).length;
-
-              return (
-                <button
-                  key={member.id}
-                  onClick={() => setCurrentUser(member.id)}
-                  className={`relative p-4 rounded-2xl border text-left transition-all duration-200 flex items-center gap-3.5 ${
-                    isActive 
-                      ? `bg-[#182117] border-[#bef264] shadow-md ring-2 ring-[#bef264]/40` 
-                      : 'bg-[#171e16] border-[#2e3b2b] hover:border-stone-600 hover:bg-[#1f281d]'
-                  }`}
-                >
-                  <div className={`w-11 h-11 rounded-2xl flex items-center justify-center text-xl bg-[#242e22] border-2 ${member.border} shadow-inner`}>
-                    {member.avatar}
-                  </div>
-                  <div className="overflow-hidden">
-                    <p className={`text-xs font-extrabold truncate ${isActive ? 'text-white' : 'text-stone-300'}`}>
-                      {member.name}
-                    </p>
-                    <p className="text-[11px] text-stone-400 mt-0.5">
-                      {slotCount} {slotCount === 1 ? 'time slot' : 'time slots'} set
-                    </p>
-                  </div>
-                  {isActive && (
-                    <div className="absolute top-3 right-3 w-2.5 h-2.5 rounded-full bg-[#bef264] animate-ping" />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </section>
-
-        {/* TWO COLUMN LAYOUT */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-
-          {/* LEFT: ADD AVAILABILITY FORM WITH INTERACTIVE CALENDAR */}
-          <div className="lg:col-span-1 space-y-6">
-            <div className="bg-[#222b20] p-6 rounded-3xl border border-[#364332] shadow-xl space-y-5">
-              <div className="flex items-center gap-2 border-b border-[#313f2f] pb-3">
-                <Plus className="w-5 h-5 text-[#bef264]" />
-                <h3 className="text-sm font-extrabold text-white uppercase tracking-wider font-mono">
-                  Add Time for <span className={activeUserObj?.tagColor}>{activeUserObj?.name}</span>
-                </h3>
-              </div>
-
-              {formError && (
-                <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-xs text-rose-400 font-medium">
-                  {formError}
-                </div>
-              )}
 
         {/* ACTIVE USER VIEW SWITCHER BAR */}
         <section className="bg-[#222b20] p-5 rounded-3xl border border-[#364332] shadow-lg">
@@ -793,7 +723,7 @@ export default function App() {
                       <div className="flex items-center justify-between">
                         <button
                           type="button"
-                          onClick={() => setCalendarViewDate(new Date(calendarViewDate.setMonth(calendarViewDate.getMonth() - 1)))}
+                          onClick={() => setCalendarViewDate(new Date(calendarViewDate.getFullYear(), calendarViewDate.getMonth() - 1, 1))}
                           className="p-1 hover:bg-[#242e22] rounded-lg text-stone-400 hover:text-white"
                         >
                           <ChevronLeft className="w-4 h-4" />
@@ -801,7 +731,7 @@ export default function App() {
                         <span className="text-xs font-bold text-white font-mono">{monthLabel}</span>
                         <button
                           type="button"
-                          onClick={() => setCalendarViewDate(new Date(calendarViewDate.setMonth(calendarViewDate.getMonth() + 1)))}
+                          onClick={() => setCalendarViewDate(new Date(calendarViewDate.getFullYear(), calendarViewDate.getMonth() + 1, 1))}
                           className="p-1 hover:bg-[#242e22] rounded-lg text-stone-400 hover:text-white"
                         >
                           <ChevronRight className="w-4 h-4" />
