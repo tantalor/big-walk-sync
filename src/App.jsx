@@ -96,10 +96,30 @@ const EMPTY_SCHEDULES = {
 
 export default function App() {
   const [user, setUser] = useState(null);
-  const [currentUser, setCurrentUser] = useState('walker_1');
+  
+  // Persist selected walker in localStorage so user selection remains sticky
+  const [currentUser, setCurrentUser] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const savedWalker = localStorage.getItem('big_walk_sync_walker');
+      if (savedWalker && SQUAD_MEMBERS.some(m => m.id === savedWalker)) {
+        return savedWalker;
+      }
+    }
+    return 'walker_1';
+  });
+
   const [userTimezone, setUserTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/New_York');
   const [schedules, setSchedules] = useState(EMPTY_SCHEDULES);
   const [isSyncing, setIsSyncing] = useState(true);
+
+  // Save walker selection to localStorage whenever it changes
+  const handleSelectWalker = (walkerId) => {
+    setCurrentUser(walkerId);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('big_walk_sync_walker', walkerId);
+    }
+    resetForm();
+  };
 
   // New & Editing Slot Form State
   const [editingSlotId, setEditingSlotId] = useState(null);
@@ -598,10 +618,7 @@ export default function App() {
               return (
                 <button
                   key={member.id}
-                  onClick={() => {
-                    setCurrentUser(member.id);
-                    resetForm();
-                  }}
+                  onClick={() => handleSelectWalker(member.id)}
                   className={`relative p-4 rounded-2xl border text-left transition-all duration-200 flex items-center gap-3.5 ${
                     isActive 
                       ? `bg-[#182117] border-[#bef264] shadow-md ring-2 ring-[#bef264]/40` 
