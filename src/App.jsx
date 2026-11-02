@@ -1,5 +1,41 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { 
+// Safe check for config variables to support Vite env vars and preview fallbacks
+const getFirebaseConfig = () => {
+  try {
+    // Check Vite Environment Variables (Netlify/Production)
+    if (import.meta.env && import.meta.env.VITE_FIREBASE_API_KEY) {
+      return {
+        apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+        authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+        projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+        storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+        messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+        appId: import.meta.env.VITE_FIREBASE_APP_ID
+// Safe check for config variables to support both Vite Env and Direct Firebase Config
+const getFirebaseConfig = () => {
+  try {
+    if (typeof window !== 'undefined' && window.__firebase_config) {
+      return typeof window.__firebase_config === 'string' 
+        ? JSON.parse(window.__firebase_config) 
+        : window.__firebase_config;
+    }
+  } catch (e) {
+    console.warn("Using fallback firebase config");
+  }
+
+  // Check Vite environment variables first, then fallback to user's Firebase Console config
+  return {
+    apiKey: import.meta.env?.VITE_FIREBASE_API_KEY || "AIzaSyC1mn-jebT1u8YfkapjJlLRTY5VD352LJs",
+    authDomain: import.meta.env?.VITE_FIREBASE_AUTH_DOMAIN || "big-walk-sync.firebaseapp.com",
+    projectId: import.meta.env?.VITE_FIREBASE_PROJECT_ID || "big-walk-sync",
+    storageBucket: import.meta.env?.VITE_FIREBASE_STORAGE_BUCKET || "big-walk-sync.firebasestorage.app",
+    messagingSenderId: import.meta.env?.VITE_FIREBASE_MESSAGING_SENDER_ID || "693397147396",
+    appId: import.meta.env?.VITE_FIREBASE_APP_ID || "1:693397147396:web:a8a5c9b2bd7c6cf744ca51"
+  };
+};
+
+const app = initializeApp(getFirebaseConfig());
+
   Compass, 
   Clock, 
   Calendar, 
@@ -33,28 +69,25 @@ import {
   deleteDoc 
 } from 'firebase/firestore';
 
-// Safe check for config variables to prevent Netlify build failures
+// Reads custom Firebase Config from environment variables or window scope
 const getFirebaseConfig = () => {
-  try {
-    if (typeof window !== 'undefined' && window.__firebase_config) {
-      return typeof window.__firebase_config === 'string' 
-        ? JSON.parse(window.__firebase_config) 
-        : window.__firebase_config;
-    }
-  } catch (e) {
-    console.warn("Using fallback firebase config");
+  if (typeof window !== 'undefined' && window.__firebase_config) {
+    return typeof window.__firebase_config === 'string' 
+      ? JSON.parse(window.__firebase_config) 
+      : window.__firebase_config;
   }
   return {
-    apiKey: "demo-api-key",
-    authDomain: "demo-app.firebaseapp.com",
-    projectId: "demo-app",
-    storageBucket: "demo-app.appspot.com",
-    messagingSenderId: "123456789",
-    appId: "1:123456789:web:123456789"
+    apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "YOUR_API_KEY",
+    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "YOUR_PROJECT_ID.firebaseapp.com",
+    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "YOUR_PROJECT_ID",
+    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "YOUR_PROJECT_ID.appspot.com",
+    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "YOUR_SENDER_ID",
+    appId: import.meta.env.VITE_FIREBASE_APP_ID || "YOUR_APP_ID"
   };
 };
 
-const app = initializeApp(getFirebaseConfig());
+const firebaseConfig = getFirebaseConfig();
+const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 const appId = (typeof window !== 'undefined' && window.__app_id) ? window.__app_id : 'big-walk-sync-app';
@@ -124,7 +157,7 @@ export default function App() {
   const [newEndTime, setNewEndTime] = useState('23:00');
   const [formError, setFormError] = useState('');
 
-  // 1. Authentication Effect
+  // 1. Authenticated Session Effect (Enforcing Auth for Production Rules)
   useEffect(() => {
     const initAuth = async () => {
       try {
@@ -132,6 +165,7 @@ export default function App() {
         if (customToken) {
           await signInWithCustomToken(auth, customToken);
         } else {
+          // Anonymous authentication creates a unique UID per user/device
           await signInAnonymously(auth);
         }
       } catch (err) {
@@ -225,13 +259,13 @@ export default function App() {
       createdAt: new Date().toISOString()
     };
 
-    // Local optimistic update
+    // Optimistic UI update
     setSchedules(prev => ({
       ...prev,
       [currentUser]: [...(prev[currentUser] || []), { id: slotId, ...newSlot }]
     }));
 
-    // Cloud persistence update
+    // Save to Firestore
     if (user) {
       try {
         const slotRef = doc(db, 'artifacts', appId, 'public', 'data', 'schedules', slotId);
@@ -244,13 +278,13 @@ export default function App() {
 
   // Remove slot (persisted to cloud)
   const handleDeleteSlot = async (userId, slotId) => {
-    // Local optimistic update
+    // Optimistic UI update
     setSchedules(prev => ({
       ...prev,
       [userId]: prev[userId].filter(slot => slot.id !== slotId)
     }));
 
-    // Cloud persistence update
+    // Remove from Firestore
     if (user) {
       try {
         const slotRef = doc(db, 'artifacts', appId, 'public', 'data', 'schedules', slotId);
@@ -374,7 +408,7 @@ export default function App() {
                   </span>
                 ) : (
                   <span className="flex items-center gap-1 text-emerald-400 text-[11px] font-bold">
-                    <Cloud className="w-3.5 h-3.5" /> <Check className="w-3 h-3 -ml-1" /> Saved to Cloud
+                    <Cloud className="w-3.5 h-3.5" /> <Check className="w-3 h-3 -ml-1" /> Auto-Saved
                   </span>
                 )}
               </p>
